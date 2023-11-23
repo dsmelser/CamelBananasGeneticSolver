@@ -44,12 +44,13 @@
 //  4 - drop bananas (opcode #2 units)
 
 #define DO_NOTHING 0
-#define MOVE_RIGHT 1
-#define MOVE_LEFT 2
+// #define MOVE_RIGHT 1
+// #define MOVE_LEFT 2
+#define MOVE_TO 1
 #define PICK_UP_BANANAS 3
 #define DROP_BANANAS 4
 
-#define MAX_CAMELS 6250
+#define MAX_CAMELS 7656
 #define MAX_INSTRUCTIONS 30
 #define VALS_PER_INSTRUCTION 2
 
@@ -106,8 +107,7 @@ void RandomizeInstructionsForCamel(
 
   int pickUpAllowed = 0; // just picked up, redundant
   int dropAllowed = 0;   // just picked up, pointless to drop immediately
-  int leftAllowed = 0;   // we start on the left edge
-  int rightAllowed = 1;  // can only go right
+  int moveAllowed = 1;
 
   for (int instruction = 1; instruction < MAX_INSTRUCTIONS; instruction++) {
     // printf("\t%d\n", instruction);
@@ -123,12 +123,20 @@ void RandomizeInstructionsForCamel(
     // printf("currentBananas: %d\n", currentBananas);
     // fflush(stdout);
 
-    if (currentBananas == 0) {
+    if (currentBananas <= 0) {
       dropAllowed = 0;
     }
 
+    if (maxPickup <= 0) {
+      pickUpAllowed = 0;
+    }
+
+    if (currentBananas <= 0) {
+      moveAllowed = 0;
+    }
+
     // easy case
-    if (pickUpAllowed && maxPickup > 0) {
+    if (pickUpAllowed) {
 
       //   printf("picking %d bananas\n", maxPickup);
       //   fflush(stdout);
@@ -139,145 +147,68 @@ void RandomizeInstructionsForCamel(
 
       currentBananas += maxPickup;
       bananas[camelLoc] -= maxPickup;
-    } else {
-      // if we have bananas we can move or drop
-      if (!(leftAllowed || rightAllowed) || (dropAllowed && rand() % 2 == 0)) {
-        if (dropAllowed) {
 
-          // drop some bananas
-          int drop = rand() % currentBananas + 1;
-          program[instruction][0] = DROP_BANANAS;
-          program[instruction][1] = drop;
+      pickUpAllowed = 0;
+      dropAllowed = 0;
+      moveAllowed = 1;
+    } else if (dropAllowed) {
+      // we have bananas we can drop (after all we just moved to our target)
+      // drop some bananas
+      int drop = rand() % currentBananas + 1;
+      program[instruction][0] = DROP_BANANAS;
+      program[instruction][1] = drop;
 
-          //   printf("dropping %d bananas\n", drop);
-          //   fflush(stdout);
-          //   sleep(2);
+      //   printf("dropping %d bananas\n", drop);
+      //   fflush(stdout);
+      //   sleep(2);
 
-          currentBananas -= drop;
-          bananas[camelLoc] += drop;
+      currentBananas -= drop;
+      bananas[camelLoc] += drop;
 
-          pickUpAllowed = 0;
-          dropAllowed = 0;
-          leftAllowed = 1;
-          rightAllowed = 1;
+      pickUpAllowed = 0;
+      dropAllowed = 0;
+      moveAllowed = 1;
 
-        } else {
+    } else if (moveAllowed) {
+      int min = camelLoc - currentBananas;
+      int max = camelLoc + currentBananas;
+      if (min < MIN_LOCATION)
+        min = MIN_LOCATION;
+      if (max > MAX_LOCATION)
+        max = MAX_LOCATION;
 
-          //   printf("went to drop but not allowed\n");
-          //   fflush(stdout);
-          //   sleep(2);
-
-          pickUpAllowed = 0;
-          dropAllowed = 0;
-          leftAllowed = 0;
-          rightAllowed = 0;
-          program[instruction][0] = DO_NOTHING;
-          program[instruction][1] = 0;
-        }
-
-      } else {
-
-        // didn't pick drop
-        // we'll move instead
-        int leftMax = min(camelLoc, currentBananas);
-        int rightMax = min(MAX_LOCATION - camelLoc, currentBananas);
-
-        if (rightMax == 0)
-          rightAllowed = 0;
-
-        if (leftMax == 0)
-          leftAllowed = 0;
-
-        // printf("leftMax: %d\n", leftMax);
-        // printf("rightMax: %d\n", rightMax);
-
-        if (leftMax == 0 && rightMax == 0) {
-          //   printf("cant move left or right\n");
-          //   fflush(stdout);
-          //   sleep(2);
-
-          // we can't move
-          pickUpAllowed = 0;
-          dropAllowed = 0;
-          leftAllowed = 0;
-          rightAllowed = 0;
-          program[instruction][0] = DO_NOTHING;
-          program[instruction][1] = 0;
-        } else {
-
-          if (leftAllowed && camelLoc > 0) {
-            if (rightAllowed && camelLoc < MAX_LOCATION) {
-
-              if (rand() % 2 == 0) {
-
-                program[instruction][0] = MOVE_LEFT;
-                program[instruction][1] = rand() % (leftMax) + 1;
-
-                // printf("chose left %d\n", program[instruction][1]);
-                // fflush(stdout);
-                // sleep(2);
-
-                camelLoc -= program[instruction][1];
-                currentBananas -= program[instruction][1];
-              } else {
-
-                program[instruction][0] = MOVE_RIGHT;
-                program[instruction][1] = rand() % (rightMax) + 1;
-
-                // printf("chose right %d\n", program[instruction][1]);
-                // fflush(stdout);
-                // sleep(2);
-
-                camelLoc += program[instruction][1];
-                currentBananas -= program[instruction][1];
-              }
-
-            } else {
-
-              // can only left move
-              program[instruction][0] = MOVE_LEFT;
-              program[instruction][1] = rand() % (leftMax) + 1;
-
-              //   printf("only left %d\n", program[instruction][1]);
-              //   fflush(stdout);
-              //   sleep(2);
-
-              camelLoc -= program[instruction][1];
-              currentBananas -= program[instruction][1];
-            }
-          } else {
-            if (rightAllowed && camelLoc < MAX_LOCATION) {
-              // can only right move
-              program[instruction][0] = MOVE_RIGHT;
-              program[instruction][1] = rand() % (rightMax) + 1;
-
-              //   printf("only right %d\n", program[instruction][1]);
-              //   fflush(stdout);
-              //   sleep(2);
-
-              camelLoc += program[instruction][1];
-              currentBananas -= program[instruction][1];
-            } else {
-
-              // can't move
-              program[instruction][0] = DO_NOTHING;
-              program[instruction][1] = 0;
-
-              //   printf("stuck... \n");
-              //   fflush(stdout);
-              //   sleep(2);
-            }
-          }
-
-          pickUpAllowed = 1;
-          dropAllowed = 1;
-          leftAllowed = 0;
-          rightAllowed = 0;
-        }
+      int target = rand() % (max - min) + min;
+      while (target == camelLoc) {
+        target = rand() % (max - min) + min;
       }
+
+      int offset = target - camelLoc;
+      program[instruction][0] = MOVE_TO;
+      program[instruction][1] = target;
+
+      camelLoc = target;
+      currentBananas -= abs(offset);
+
+      moveAllowed = 0;
+      // we'll allow drop if we just moved right
+      // we'll allow pick up if we just moved left
+      if (offset > 0) {
+        dropAllowed = 1;
+        pickUpAllowed = 0;
+      } else {
+        dropAllowed = 0;
+        pickUpAllowed = 1;
+      }
+
+    } else {
+
+      pickUpAllowed = 0;
+      dropAllowed = 0;
+      moveAllowed = 0;
+      program[instruction][0] = DO_NOTHING;
+      program[instruction][1] = 0;
     }
   }
-  //   tabLevel--;
 }
 
 void RandomizeInstructions(
@@ -389,19 +320,17 @@ void RunProgramForCamel(
     switch (instr) {
     case DO_NOTHING:
       break;
-    case MOVE_LEFT:
-      opcode = -opcode; // we'll fall through to the case below
-                        // but movign the other dir
-    case MOVE_RIGHT:
-      // make sure the final camel location is between 0 and
-      // 1000 if not we'll just zero out this instruction
-      if (camelLoc[camel] + opcode <= MAX_LOCATION &&
-          camelLoc[camel] + opcode >= MIN_LOCATION &&
-          // make sure the camel eats as it goes
-          camelBananas[camel] >= abs(opcode)) {
-        camelLoc[camel] += opcode;
-        camelBananas[camel] -= abs(opcode);
+    case MOVE_TO:
+      int dist = abs(opcode - camelLoc[camel]);
+      // make sure we're not trying to move to the current location
+      // make sure the camel eats as it goes
+      if (camelLoc[camel] != opcode && camelBananas[camel] >= dist) {
+        camelLoc[camel] = opcode;
+        camelBananas[camel] -= dist;
       } else {
+        // printf("!!! Camel %d tried to move to %d from %d but only has %d "
+        //        "bananas\n",
+        //        camel, opcode, camelLoc[camel], camelBananas[camel]);
         instructions[camel][ip][0] = 0;
         instructions[camel][ip][1] = 0;
       }
@@ -562,11 +491,8 @@ void PrintProgram(int program[MAX_INSTRUCTIONS][VALS_PER_INSTRUCTION]) {
     switch (instr) {
     case DO_NOTHING:
       break;
-    case MOVE_LEFT:
-      printf("\tleft %d\n", opcode);
-      break;
-    case MOVE_RIGHT:
-      printf("\tright %d\n", opcode);
+    case MOVE_TO:
+      printf("\tmove to %d\n", opcode);
       break;
     case PICK_UP_BANANAS:
       printf("\ttake %d\n", opcode);
@@ -725,10 +651,33 @@ int main() {
       // mutate the child
       for (int m = 0; m < mutationRate; m++) {
         int ip = rand() % MAX_INSTRUCTIONS;
-        int instr = rand() % 5;
-        int opcode = rand() % 1000 + 1;
-        instructions[childC][ip][0] = instr;
-        instructions[childC][ip][1] = opcode;
+        while (instructions[childC][ip][0] == 0) {
+          ip = rand() % MAX_INSTRUCTIONS;
+        }
+
+        switch (ip) {
+        case MOVE_TO:
+          instructions[childC][ip][1] += rand() % 2 == 0 ? 1 : -1;
+          if (instructions[childC][ip][1] < 0)
+            instructions[childC][ip][1] = 1;
+          if (instructions[childC][ip][1] > 1000)
+            instructions[childC][ip][1] = 999;
+          break;
+        case PICK_UP_BANANAS:
+          instructions[childC][ip][1] += rand() % 2 == 0 ? 1 : -1;
+          if (instructions[childC][ip][1] < 1)
+            instructions[childC][ip][1] = 2;
+          if (instructions[childC][ip][1] > 1000)
+            instructions[childC][ip][1] = 999;
+          break;
+        case DROP_BANANAS:
+          instructions[childC][ip][1] += rand() % 2 == 0 ? 1 : -1;
+          if (instructions[childC][ip][1] < 1)
+            instructions[childC][ip][1] = 2;
+          if (instructions[childC][ip][1] > 1000)
+            instructions[childC][ip][1] = 999;
+          break;
+        }
       }
 
       RunProgramForCamel(childC, instructions, camelLoc, bananasOnGround,
@@ -742,7 +691,7 @@ int main() {
         if (instructions[childC][ip][0] != instructions[parentA][ip][0] ||
             instructions[childC][ip][1] != instructions[parentA][ip][1]) {
           parentADiffs++;
-          if (parentADiffs > 1 && parentBDiffs > 1) {
+          if (parentADiffs > 0 && parentBDiffs > 0) {
             break;
           }
         }
@@ -750,23 +699,68 @@ int main() {
         if (instructions[childC][ip][0] != instructions[parentB][ip][0] ||
             instructions[childC][ip][1] != instructions[parentB][ip][1]) {
           parentBDiffs++;
-          if (parentADiffs > 1 && parentBDiffs > 1) {
+          if (parentADiffs > 0 && parentBDiffs > 0) {
             break;
           }
         }
       }
 
+      int neededClone = 0;
       if (parentADiffs == 0 || parentBDiffs == 0) {
+        neededClone = 1;
         // child is a clone of one of the parents
         // not useful
         // replace with a random camel
+
+        // printf("\nChild is a clone of a parent, replacing with totally random
+        // "
+        //        "camel\n");
+        // fflush(stdout);
+
+        // int printFrom = parentA;
+        // if (parentBDiffs > 0) {
+        //   printFrom = parentB;
+        // }
+        // printf("Matching Parent:\n");
+        // fflush(stdout);
+        // PrintProgram(instructions[printFrom]);
+        // sleep(5);
+
+        // printf("Child (pre-random):\n");
+        // fflush(stdout);
+        // PrintProgram(instructions[childC]);
+        // sleep(5);
+
         RandomizeInstructionsForCamel(instructions[childC]);
+
+        // printf("New camel (pre-run):\n");
+        // fflush(stdout);
+        // PrintProgram(instructions[childC]);
+        // sleep(5);
+
         RunProgramForCamel(childC, instructions, camelLoc, bananasOnGround,
                            camelBananas);
+
+        // printf("New camel (post-run, pre-compression):\n");
+        // fflush(stdout);
+        // PrintProgram(instructions[childC]);
+        // sleep(5);
+
         CompressProgram(instructions[childC]);
+
+        // printf("New camel (post-compression):\n");
+        // fflush(stdout);
+        // PrintProgram(instructions[childC]);
+        // sleep(5);
       }
 
       ScoreCamel(childC, finalBananas, bananasOnGround, camelErrors);
+
+      //   if (neededClone) {
+      //     printf("\n\t-New camel score-\tMarket Bananas: %d\tError: %lld",
+      //            finalBananas[childC], camelErrors[childC]);
+      //     fflush(stdout);
+      //   }
     }
 
     free(sortedCamels);
