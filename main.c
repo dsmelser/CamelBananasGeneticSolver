@@ -50,7 +50,7 @@
 #define PICK_UP_BANANAS 3
 #define DROP_BANANAS 4
 
-#define MAX_CAMELS 7656
+#define MAX_CAMELS 2500
 #define MAX_INSTRUCTIONS 30
 #define VALS_PER_INSTRUCTION 2
 
@@ -58,9 +58,12 @@
 #define MAX_CAMEL_BANANAS 1000
 #define MIN_LOCATION 0
 #define MAX_LOCATION 1000
+#define MAX_CAMEL_LOCS 10
 
 #define min(a, b) (((a) < (b)) ? (a) : (b))
+#define max(a, b) (((a) > (b)) ? (a) : (b))
 
+#define TRACE 0
 int tabLevel = 0;
 
 void PrintTabs() {
@@ -70,11 +73,15 @@ void PrintTabs() {
 }
 
 void RandomizeInstructionsForCamel(
-    int program[MAX_INSTRUCTIONS][VALS_PER_INSTRUCTION]) {
-  //   tabLevel++;
-  //   PrintTabs();
-  //   printf("___RandomizeInstructionsForCamel___\n");
-  //   fflush(stdout);
+    int program[MAX_INSTRUCTIONS][VALS_PER_INSTRUCTION],
+    int allowableLocs[MAX_CAMEL_LOCS], int allowableLocCount) {
+
+  if (TRACE) {
+    tabLevel++;
+    PrintTabs();
+    printf("___RandomizeInstructionsForCamel___\n");
+    fflush(stdout);
+  }
 
   // we're going to be a little smarter here
 
@@ -96,13 +103,12 @@ void RandomizeInstructionsForCamel(
     bananas[loc] = 0;
   }
 
-  //   printf("Starting with picking up max bananas\n");
+  //   printf("Starting with picking up max bananas\n\n");
   //   fflush(stdout);
   //   sleep(2);
 
   program[0][0] = PICK_UP_BANANAS;
-  program[0][1] =
-      MAX_CAMEL_BANANAS; // we'll pick up as many as we can at the start
+  program[0][1] = MAX_CAMEL_BANANAS;
   int currentBananas = MAX_CAMEL_BANANAS;
 
   int pickUpAllowed = 0; // just picked up, redundant
@@ -110,18 +116,8 @@ void RandomizeInstructionsForCamel(
   int moveAllowed = 1;
 
   for (int instruction = 1; instruction < MAX_INSTRUCTIONS; instruction++) {
-    // printf("\t%d\n", instruction);
-    // printf("camelLoc: %d\n", camelLoc);
-    // fflush(stdout);
-
     int availableBananas = bananas[camelLoc];
-    // printf("availableBananas: %d\n", availableBananas);
-
     int maxPickup = min(MAX_CAMEL_BANANAS - currentBananas, availableBananas);
-    // printf("maxPickup: %d\n", maxPickup);
-
-    // printf("currentBananas: %d\n", currentBananas);
-    // fflush(stdout);
 
     if (currentBananas <= 0) {
       dropAllowed = 0;
@@ -137,11 +133,6 @@ void RandomizeInstructionsForCamel(
 
     // easy case
     if (pickUpAllowed) {
-
-      //   printf("picking %d bananas\n", maxPickup);
-      //   fflush(stdout);
-      //   sleep(2);
-      // there are bananas here, pick them up
       program[instruction][0] = PICK_UP_BANANAS;
       program[instruction][1] = maxPickup;
 
@@ -152,6 +143,7 @@ void RandomizeInstructionsForCamel(
       dropAllowed = 0;
       moveAllowed = 1;
     } else if (dropAllowed) {
+
       // we have bananas we can drop (after all we just moved to our target)
       // drop some bananas
       int drop = rand() % currentBananas + 1;
@@ -170,36 +162,65 @@ void RandomizeInstructionsForCamel(
       moveAllowed = 1;
 
     } else if (moveAllowed) {
-      int min = camelLoc - currentBananas;
-      int max = camelLoc + currentBananas;
-      if (min < MIN_LOCATION)
-        min = MIN_LOCATION;
-      if (max > MAX_LOCATION)
-        max = MAX_LOCATION;
 
-      int target = rand() % (max - min) + min;
-      while (target == camelLoc) {
-        target = rand() % (max - min) + min;
+      int validMoves = 0;
+      for (int i = 0; i < allowableLocCount; i++) {
+
+        int moveLoc = allowableLocs[i];
+        int moveDist = abs(moveLoc - camelLoc);
+        if (moveDist > 0 && moveDist <= currentBananas) {
+
+          //   printf("valid move from %d to %d with %d bananas.\n", camelLoc,
+          //          moveLoc, currentBananas);
+          //   sleep(1);
+
+          validMoves++;
+        }
       }
 
-      int offset = target - camelLoc;
-      program[instruction][0] = MOVE_TO;
-      program[instruction][1] = target;
+      if (validMoves > 0) {
+        int targetIndex = rand() % allowableLocCount;
+        int target = allowableLocs[targetIndex];
+        int dist = abs(target - camelLoc);
 
-      camelLoc = target;
-      currentBananas -= abs(offset);
+        while (target == camelLoc || dist > currentBananas) {
+          targetIndex = rand() % allowableLocCount;
+          target = allowableLocs[targetIndex];
+          dist = abs(target - camelLoc);
 
-      moveAllowed = 0;
-      // we'll allow drop if we just moved right
-      // we'll allow pick up if we just moved left
-      if (offset > 0) {
-        dropAllowed = 1;
-        pickUpAllowed = 0;
+          //   printf("camelLoc: %d\n", camelLoc);
+          //   printf("allowableLocCount: %d\n", allowableLocCount);
+          //   printf("currentBananas: %d\n", currentBananas);
+
+          //   printf("targetIndex: %d\n", targetIndex);
+          //   printf("target: %d\n", target);
+          //   printf("dist: %d\n", dist);
+        }
+
+        int offset = target - camelLoc;
+        program[instruction][0] = MOVE_TO;
+        program[instruction][1] = targetIndex;
+
+        camelLoc = target;
+        currentBananas -= abs(offset);
+
+        moveAllowed = 0;
+        // we'll allow drop if we just moved right
+        // we'll allow pick up if we just moved left
+        if (offset > 0) {
+          dropAllowed = 1;
+          pickUpAllowed = 0;
+        } else {
+          dropAllowed = 0;
+          pickUpAllowed = 1;
+        }
       } else {
+        pickUpAllowed = 0;
         dropAllowed = 0;
-        pickUpAllowed = 1;
+        moveAllowed = 0;
+        program[instruction][0] = DO_NOTHING;
+        program[instruction][1] = 0;
       }
-
     } else {
 
       pickUpAllowed = 0;
@@ -209,65 +230,147 @@ void RandomizeInstructionsForCamel(
       program[instruction][1] = 0;
     }
   }
+  if (TRACE) {
+    tabLevel--;
+  }
 }
 
 void RandomizeInstructions(
-    int instructions[MAX_CAMELS][MAX_INSTRUCTIONS][VALS_PER_INSTRUCTION]) {
-  //   tabLevel++;
-  //   PrintTabs();
-  //   printf("___RandomizeInstructions___\n");
-  //   fflush(stdout);
+    int instructions[MAX_CAMELS][MAX_INSTRUCTIONS][VALS_PER_INSTRUCTION],
+    int allowableLocs[MAX_CAMELS][MAX_CAMEL_LOCS],
+    int allowableLocCount[MAX_CAMELS]) {
+
+  if (TRACE) {
+    tabLevel++;
+    PrintTabs();
+    printf("___RandomizeInstructions___\n");
+    fflush(stdout);
+  }
 
   for (int camel = 0; camel < MAX_CAMELS; camel++) {
-    RandomizeInstructionsForCamel(instructions[camel]);
+    RandomizeInstructionsForCamel(instructions[camel], allowableLocs[camel],
+                                  allowableLocCount[camel]);
   }
-  //   tabLevel--;
+  if (TRACE) {
+    tabLevel--;
+  }
 }
 
 int* GenerateStartingLocations() {
+  if (TRACE) {
+    tabLevel++;
+    PrintTabs();
+    printf("___GenerateStartingLocations___\n");
+    fflush(stdout);
+  }
+
   int* camelLoc = malloc(sizeof(int) * MAX_CAMELS);
   for (int camel = 0; camel < MAX_CAMELS; camel++) {
     camelLoc[camel] = 0;
+  }
+
+  if (TRACE) {
+    tabLevel--;
   }
   return camelLoc;
 }
 
 int* GenerateStartingBananas() {
+  if (TRACE) {
+    tabLevel++;
+    PrintTabs();
+    printf("___GenerateStartingBananas___\n");
+    fflush(stdout);
+  }
+
   int* camelBananas = malloc(sizeof(int) * MAX_CAMELS);
   for (int camel = 0; camel < MAX_CAMELS; camel++) {
     camelBananas[camel] = 0;
   }
+
+  if (TRACE) {
+    tabLevel--;
+  }
   return camelBananas;
 }
 
-int* GenerateStartingGroundBananas() {
-  int* groundBananas = malloc(sizeof(int) * MAX_CAMELS * (MAX_LOCATION + 1));
-  for (int camel = 0; camel < MAX_CAMELS; camel++) {
-    groundBananas[camel * (MAX_LOCATION + 1)] = START_GROUND_BANANAS;
-    for (int loc = MIN_LOCATION + 1; loc <= MAX_LOCATION; loc++) {
-      groundBananas[camel * (MAX_LOCATION + 1) + loc] = 0;
-    }
-  }
-  return groundBananas;
-}
+// int* GenerateStartingGroundBananas() {
+//   if (TRACE) {
+//     tabLevel++;
+//     PrintTabs();
+//     printf("___GenerateStartingGroundBananas___\n");
+//     fflush(stdout);
+//   }
+
+//   // TODO: this scales poorly
+//   //  we don't need to track ground bananas for every single location
+//   //  we only need to track them for the locations that are allowable
+//   //  however, this means a 2nd indirection step where we get the location
+
+//   // actually this doesn't need to be stored permanently anyway
+//   // it's only used during the scoring phase...
+//   int* groundBananas = malloc(sizeof(int) * MAX_CAMELS * (MAX_LOCATION + 1));
+//   for (int camel = 0; camel < MAX_CAMELS; camel++) {
+//     groundBananas[camel * (MAX_LOCATION + 1)] = START_GROUND_BANANAS;
+//     for (int loc = MIN_LOCATION + 1; loc <= MAX_LOCATION; loc++) {
+//       groundBananas[camel * (MAX_LOCATION + 1) + loc] = 0;
+//     }
+//   }
+
+//   if (TRACE) {
+//     tabLevel--;
+//   }
+//   return groundBananas;
+// }
 
 long long* GenerateStartingErrors() {
+  if (TRACE) {
+    tabLevel++;
+    PrintTabs();
+    printf("___GenerateStartingErrors___\n");
+    fflush(stdout);
+  }
+
   long long* camelErrors = malloc(sizeof(long long) * MAX_CAMELS);
   for (int camel = 0; camel < MAX_CAMELS; camel++) {
     camelErrors[camel] = 0;
+  }
+
+  if (TRACE) {
+    tabLevel--;
   }
   return camelErrors;
 }
 
 int* GenerateStartingFinalBananas() {
+
+  if (TRACE) {
+    tabLevel++;
+    PrintTabs();
+    printf("___GenerateStartingFinalBananas___\n");
+    fflush(stdout);
+  }
+
   int* finalBananas = malloc(sizeof(int) * MAX_CAMELS);
   for (int camel = 0; camel < MAX_CAMELS; camel++) {
     finalBananas[camel] = 0;
+  }
+
+  if (TRACE) {
+    tabLevel--;
   }
   return finalBananas;
 }
 
 int* SortCamels(int* finalBananas, long long* camelErrors) {
+
+  if (TRACE) {
+    tabLevel++;
+    PrintTabs();
+    printf("___SortCamels___\n");
+    fflush(stdout);
+  }
+
   int* sortedCamels = malloc(sizeof(int) * MAX_CAMELS);
 
   int camelScores[MAX_CAMELS];
@@ -298,19 +401,37 @@ int* SortCamels(int* finalBananas, long long* camelErrors) {
     sortedCamels[position] = i;
   }
 
+  if (TRACE) {
+    tabLevel--;
+  }
   return sortedCamels;
 }
 
-void RunProgramForCamel(
+int* RunProgramForCamel(
+
     int camel,
     int instructions[MAX_CAMELS][MAX_INSTRUCTIONS][VALS_PER_INSTRUCTION],
-    int* camelLoc, int* bananasOnGround, int* camelBananas) {
+    int* camelLoc, int allowableLocs[MAX_CAMELS][MAX_CAMEL_LOCS],
+    int allowableLocCounts[MAX_CAMELS], int* camelBananas) {
+
+  if (TRACE) {
+    tabLevel++;
+    PrintTabs();
+    printf("___RunProgramForCamel___\n");
+    fflush(stdout);
+  }
 
   camelLoc[camel] = 0;
   camelBananas[camel] = 0;
-  bananasOnGround[camel * (MAX_LOCATION + 1)] = 3000;
+
+  int* bananasOnGround = malloc(sizeof(int) * MAX_LOCATION + 1);
+  for (int loc = MIN_LOCATION; loc <= MAX_LOCATION; loc++) {
+    bananasOnGround[loc] = 0;
+  }
+  bananasOnGround[MIN_LOCATION] = START_GROUND_BANANAS;
+
   for (int loc = 1; loc <= MAX_LOCATION; loc++) {
-    bananasOnGround[camel * (MAX_LOCATION + 1) + loc] = 0;
+    bananasOnGround[loc] = 0;
   }
 
   for (int ip = 0; ip < MAX_INSTRUCTIONS; ip++) {
@@ -321,11 +442,15 @@ void RunProgramForCamel(
     case DO_NOTHING:
       break;
     case MOVE_TO:
-      int dist = abs(opcode - camelLoc[camel]);
+      // opcode is now a lookup in the allowable locations array
+      int moveLoc = allowableLocs[camel][opcode];
+
+      int dist = abs(moveLoc - camelLoc[camel]);
       // make sure we're not trying to move to the current location
       // make sure the camel eats as it goes
-      if (camelLoc[camel] != opcode && camelBananas[camel] >= dist) {
-        camelLoc[camel] = opcode;
+      if (opcode < allowableLocCounts[camel] && camelLoc[camel] != moveLoc &&
+          camelBananas[camel] >= dist) {
+        camelLoc[camel] = moveLoc;
         camelBananas[camel] -= dist;
       } else {
         // printf("!!! Camel %d tried to move to %d from %d but only has %d "
@@ -339,10 +464,9 @@ void RunProgramForCamel(
       // make sure there are at least as many bananas on the
       // ground as we're trying to pick up if not we'll just
       // zero out this instruction
-      if (bananasOnGround[camel * (MAX_LOCATION + 1) + camelLoc[camel]] >=
-              opcode &&
+      if (bananasOnGround[camelLoc[camel]] >= opcode &&
           camelBananas[camel] + opcode <= MAX_CAMEL_BANANAS) {
-        bananasOnGround[camel * (MAX_LOCATION + 1) + camelLoc[camel]] -= opcode;
+        bananasOnGround[camelLoc[camel]] -= opcode;
         camelBananas[camel] += opcode;
       } else {
         instructions[camel][ip][0] = 0;
@@ -355,7 +479,7 @@ void RunProgramForCamel(
 
       // if not we'll just zero out this instruction
       if (camelBananas[camel] >= opcode) {
-        bananasOnGround[camel * (MAX_LOCATION + 1) + camelLoc[camel]] += opcode;
+        bananasOnGround[camelLoc[camel]] += opcode;
         camelBananas[camel] -= opcode;
       } else {
         instructions[camel][ip][0] = 0;
@@ -364,30 +488,62 @@ void RunProgramForCamel(
       break;
     }
   }
+  if (TRACE) {
+    tabLevel--;
+  }
 
-  // drop any remaining bananas
-  //   bananasOnGround[camel * (MAX_LOCATION + 1) + camelLoc[camel]] +=
-  //       camelBananas[camel];
-  //   camelBananas[camel] = 0;
+  return bananasOnGround;
 }
 
 void ScoreCamel(int camel, int* finalBananas, int* bananasOnGround,
                 long long* camelErrors) {
+  if (TRACE) {
+    tabLevel++;
+    PrintTabs();
+    printf("___ScoreCamel___\n");
+    fflush(stdout);
+  }
+
+  //   printf("DEBUG POINT A\n");
+  //   fflush(stdout);
+
+  //   for (int i = 0; i < MAX_LOCATION + 1; i++) {
+  //     printf("bananasOnGround[%d]: %d\n", i, bananasOnGround[i]);
+  //     fflush(stdout);
+  //   }
+
   // primary sort value (higher is better)
-  finalBananas[camel] =
-      bananasOnGround[camel * (MAX_LOCATION + 1) + MAX_LOCATION];
+  finalBananas[camel] = bananasOnGround[MAX_LOCATION];
+
+  //   printf("DEBUG POINT B\n");
+  //   fflush(stdout);
 
   // tie-breaker (lower is better)
   camelErrors[camel] = 3000000;
 
   for (int loc = MIN_LOCATION; loc <= MAX_LOCATION; loc++) {
-    long long bananas = bananasOnGround[camel * (MAX_LOCATION + 1) + loc];
+    long long bananas = bananasOnGround[loc];
     long long marginalScore = bananas * loc;
     camelErrors[camel] -= marginalScore;
+  }
+
+  //   printf("DEBUG POINT C\n");
+  //   fflush(stdout);
+
+  if (TRACE) {
+    tabLevel--;
   }
 }
 
 int MergeRepeats(int program[MAX_INSTRUCTIONS][VALS_PER_INSTRUCTION]) {
+
+  if (TRACE) {
+    tabLevel++;
+    PrintTabs();
+    printf("___MergeRepeats___\n");
+    fflush(stdout);
+  }
+
   int repeats = 0;
   for (int ip = 0; ip < MAX_INSTRUCTIONS - 1; ip++) {
     if (program[ip][0] != DO_NOTHING && program[ip][0] == program[ip + 1][0]) {
@@ -453,10 +609,22 @@ int MergeRepeats(int program[MAX_INSTRUCTIONS][VALS_PER_INSTRUCTION]) {
       }
     }
   }
+
+  if (TRACE) {
+    tabLevel--;
+  }
   return repeats;
 }
 
 void RemoveZeros(int program[MAX_INSTRUCTIONS][VALS_PER_INSTRUCTION]) {
+
+  if (TRACE) {
+    tabLevel++;
+    PrintTabs();
+    printf("___RemoveZeros___\n");
+    fflush(stdout);
+  }
+
   int skip = 0;
   for (int ip = 0; ip + skip < MAX_INSTRUCTIONS; ip++) {
 
@@ -473,17 +641,41 @@ void RemoveZeros(int program[MAX_INSTRUCTIONS][VALS_PER_INSTRUCTION]) {
     program[i][0] = 0;
     program[i][1] = 0;
   }
+
+  if (TRACE) {
+    tabLevel--;
+  }
 }
 
 void CompressProgram(int program[MAX_INSTRUCTIONS][VALS_PER_INSTRUCTION]) {
+
+  if (TRACE) {
+    tabLevel++;
+    PrintTabs();
+    printf("___CompressProgram___\n");
+    fflush(stdout);
+  }
+
   int repeats = 0;
   do {
     repeats = MergeRepeats(program);
     RemoveZeros(program);
   } while (repeats > 0);
+
+  if (TRACE) {
+    tabLevel--;
+  }
 }
 
-void PrintProgram(int program[MAX_INSTRUCTIONS][VALS_PER_INSTRUCTION]) {
+void PrintProgram(int program[MAX_INSTRUCTIONS][VALS_PER_INSTRUCTION],
+                  int allowableLocs[MAX_CAMEL_LOCS]) {
+  if (TRACE) {
+    tabLevel++;
+    PrintTabs();
+    printf("___PrintProgram___\n");
+    fflush(stdout);
+  }
+
   for (int ip = 0; ip < MAX_INSTRUCTIONS; ip++) {
     int instr = program[ip][0];
     int opcode = program[ip][1];
@@ -492,7 +684,7 @@ void PrintProgram(int program[MAX_INSTRUCTIONS][VALS_PER_INSTRUCTION]) {
     case DO_NOTHING:
       break;
     case MOVE_TO:
-      printf("\tmove to %d\n", opcode);
+      printf("\tmove to %d\n", allowableLocs[opcode]);
       break;
     case PICK_UP_BANANAS:
       printf("\ttake %d\n", opcode);
@@ -502,19 +694,69 @@ void PrintProgram(int program[MAX_INSTRUCTIONS][VALS_PER_INSTRUCTION]) {
       break;
     }
   }
+  if (TRACE) {
+    tabLevel--;
+  }
+}
+
+void RandomizeAllowableLocations(int allowableLocs[MAX_CAMELS][MAX_CAMEL_LOCS],
+                                 int allowableLocCounts[MAX_CAMELS]) {
+
+  if (TRACE) {
+    tabLevel++;
+    PrintTabs();
+    printf("___RandomizeAllowableLocations___\n");
+    fflush(stdout);
+  }
+
+  for (int camel = 0; camel < MAX_CAMELS; camel++) {
+
+    allowableLocs[camel][0] = 0;            // always allow location 0
+    allowableLocs[camel][1] = MAX_LOCATION; // always allow location 1000
+    for (int i = 2; i <= MAX_LOCATION; i++) {
+      allowableLocs[camel][i] = i - 1;
+    }
+    for (int i = 2; i <= MAX_LOCATION; i++) {
+      int swapLoc = rand() % (MAX_LOCATION - 1) + 2;
+      int temp = allowableLocs[camel][i];
+      allowableLocs[camel][i] = allowableLocs[camel][swapLoc];
+      allowableLocs[camel][swapLoc] = temp;
+    }
+    allowableLocCounts[camel] = 3;
+    while (rand() % 2 == 0 && allowableLocCounts[camel] <= MAX_LOCATION) {
+      allowableLocCounts[camel]++;
+    }
+  }
+  if (TRACE) {
+    tabLevel--;
+  }
 }
 
 int main() {
+  if (TRACE) {
+    PrintTabs();
+    printf("___main___\n");
+    fflush(stdout);
+    // sleep(10);
+  }
+
   time_t t;
   srand((unsigned)time(&t));
 
   int instructions[MAX_CAMELS][MAX_INSTRUCTIONS][VALS_PER_INSTRUCTION];
 
-  RandomizeInstructions(instructions);
+  // this array doesn't scale well
+  // there's no reason to have camels with every allowable location
+  int allowableLocs[MAX_CAMELS][MAX_CAMEL_LOCS];
+  int allowableLocCounts[MAX_CAMELS];
+
+  RandomizeAllowableLocations(allowableLocs, allowableLocCounts);
+
+  RandomizeInstructions(instructions, allowableLocs, allowableLocCounts);
 
   int* camelLoc = GenerateStartingLocations();
   int* camelBananas = GenerateStartingBananas();
-  int* bananasOnGround = GenerateStartingGroundBananas(); // needs to be 1001
+  // int* bananasOnGround = GenerateStartingGroundBananas(); // needs to be 1001
 
   long long* camelErrors = GenerateStartingErrors();
   int* finalBananas = GenerateStartingFinalBananas();
@@ -522,10 +764,19 @@ int main() {
   // run the simulation
   for (int camel = 0; camel < MAX_CAMELS; camel++) {
 
-    RunProgramForCamel(camel, instructions, camelLoc, bananasOnGround,
-                       camelBananas);
+    int* bananasOnGround =
+        RunProgramForCamel(camel, instructions, camelLoc, allowableLocs,
+                           allowableLocCounts, camelBananas);
 
     ScoreCamel(camel, finalBananas, bananasOnGround, camelErrors);
+
+    // TODO: this free is either needed or will crash the app
+    //   I'm not sure which
+    // printf("freeing bananasOnGround\n");
+    // fflush(stdout);
+    free(bananasOnGround);
+    // printf("freed bananasOnGround\n");
+    // fflush(stdout);
   }
 
   int mutationRate = 1;
@@ -540,7 +791,8 @@ int main() {
       printf("\nNew best camel: %d\tMarket Bananas: %d\tError: %lld\n",
              sortedCamels[0], finalBananas[sortedCamels[0]],
              camelErrors[sortedCamels[0]]);
-      PrintProgram(instructions[sortedCamels[0]]);
+      PrintProgram(instructions[sortedCamels[0]],
+                   allowableLocs[sortedCamels[0]]);
 
       genSinceLastBest = 0;
       mutationRate = 1;
@@ -554,23 +806,6 @@ int main() {
              genSinceLastBest);
       fflush(stdout);
     }
-
-    // printf("_________________________________________________\n");
-    // for (int cp = 0; cp < 5; cp++) {
-    //   int camel = sortedCamels[cp];
-    //   printf("Camel: ");
-    //   fflush(stdout);
-    //   printf("%d\t", camel);
-    //   fflush(stdout);
-    //   printf("Market Bananas: ");
-    //   fflush(stdout);
-    //   printf("%d\t", finalBananas[camel]);
-    //   fflush(stdout);
-    //   printf("Error: %lld\n", camelErrors[camel]);
-    //   fflush(stdout);
-    // }
-
-    // sleep(2);
 
     for (int camel = 0; camel < MAX_CAMELS; camel++) {
       CompressProgram(instructions[camel]);
@@ -586,9 +821,20 @@ int main() {
       int sortedChildC = sortedParentA + (MAX_CAMELS / 2);
       int childC = sortedCamels[sortedChildC];
 
-      //   printf("!!! Replacing camel[%d] with child of camel[%d] and
-      //   camel[%d]\n",
-      //          childC, parentA, parentB);
+      // TODO: child has totally different allowable locations than parents
+      // none of the indices match up
+
+      // need to consider sorting the allowable locations (less than the max
+      // allowable location)
+      //  and then using the sorted indices to pick the allowable locations for
+      //  the child
+
+      allowableLocCounts[childC] =
+          max(allowableLocCounts[parentA], allowableLocCounts[parentB]);
+      for (int i = 0; i <= MAX_LOCATION; i++) {
+        allowableLocs[childC][i] =
+            (allowableLocs[parentA][i] + allowableLocs[parentB][i] + 1) / 2;
+      }
 
       for (int ip = 0; ip < MAX_INSTRUCTIONS; ip++) {
 
@@ -660,8 +906,19 @@ int main() {
           instructions[childC][ip][1] += rand() % 2 == 0 ? 1 : -1;
           if (instructions[childC][ip][1] < 0)
             instructions[childC][ip][1] = 1;
-          if (instructions[childC][ip][1] > 1000)
-            instructions[childC][ip][1] = 999;
+          if (instructions[childC][ip][1] > allowableLocCounts[childC]) {
+
+            // this shouldn't happen anymore
+            // dumb...yes it will
+            // we literally increment right at the top...
+
+            if (allowableLocCounts[childC] < MAX_CAMEL_LOCS) {
+              allowableLocCounts[childC]++;
+            } else {
+              instructions[childC][ip][1] = MAX_CAMEL_LOCS - 1;
+            }
+          }
+
           break;
         case PICK_UP_BANANAS:
           instructions[childC][ip][1] += rand() % 2 == 0 ? 1 : -1;
@@ -680,8 +937,9 @@ int main() {
         }
       }
 
-      RunProgramForCamel(childC, instructions, camelLoc, bananasOnGround,
-                         camelBananas);
+      int* bananasOnGround =
+          RunProgramForCamel(childC, instructions, camelLoc, allowableLocs,
+                             allowableLocCounts, camelBananas);
       CompressProgram(instructions[childC]);
 
       int parentADiffs = 0;
@@ -708,59 +966,26 @@ int main() {
       int neededClone = 0;
       if (parentADiffs == 0 || parentBDiffs == 0) {
         neededClone = 1;
-        // child is a clone of one of the parents
-        // not useful
-        // replace with a random camel
 
-        // printf("\nChild is a clone of a parent, replacing with totally random
-        // "
-        //        "camel\n");
-        // fflush(stdout);
+        RandomizeInstructionsForCamel(instructions[childC],
+                                      allowableLocs[childC],
+                                      allowableLocCounts[childC]);
 
-        // int printFrom = parentA;
-        // if (parentBDiffs > 0) {
-        //   printFrom = parentB;
-        // }
-        // printf("Matching Parent:\n");
-        // fflush(stdout);
-        // PrintProgram(instructions[printFrom]);
-        // sleep(5);
-
-        // printf("Child (pre-random):\n");
-        // fflush(stdout);
-        // PrintProgram(instructions[childC]);
-        // sleep(5);
-
-        RandomizeInstructionsForCamel(instructions[childC]);
-
-        // printf("New camel (pre-run):\n");
-        // fflush(stdout);
-        // PrintProgram(instructions[childC]);
-        // sleep(5);
-
-        RunProgramForCamel(childC, instructions, camelLoc, bananasOnGround,
-                           camelBananas);
-
-        // printf("New camel (post-run, pre-compression):\n");
-        // fflush(stdout);
-        // PrintProgram(instructions[childC]);
-        // sleep(5);
+        bananasOnGround =
+            RunProgramForCamel(childC, instructions, camelLoc, allowableLocs,
+                               allowableLocCounts, camelBananas);
 
         CompressProgram(instructions[childC]);
-
-        // printf("New camel (post-compression):\n");
-        // fflush(stdout);
-        // PrintProgram(instructions[childC]);
-        // sleep(5);
       }
 
       ScoreCamel(childC, finalBananas, bananasOnGround, camelErrors);
 
-      //   if (neededClone) {
-      //     printf("\n\t-New camel score-\tMarket Bananas: %d\tError: %lld",
-      //            finalBananas[childC], camelErrors[childC]);
-      //     fflush(stdout);
-      //   }
+      // could crash...
+      //   printf("freeing bananasOnGround 965\n");
+      //   fflush(stdout);
+      free(bananasOnGround);
+      //   printf("freed bananasOnGround 965\n");
+      //   fflush(stdout);
     }
 
     free(sortedCamels);
